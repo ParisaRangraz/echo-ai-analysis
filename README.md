@@ -38,9 +38,33 @@ before it. Only then were they connected end to end.
 
 ## Results
 
-### End-to-end, on 50 validation patients
+### Held-out test set — the headline numbers
 
-No ground-truth masks anywhere in the path; they are used only for scoring.
+50 patients the pipeline had never seen, evaluated once, after every decision
+was frozen. No ground-truth masks anywhere in the path; they are used only for
+scoring. Model: PVTv2 + reverse attention. EF offset: measured on training.
+
+| Metric | Value |
+|---|---|
+| LV Dice, ED mask (4CH) | 0.946 +/- 0.020 |
+| LV Dice, propagated ES mask (4CH) | 0.882 +/- 0.051 |
+| LV Dice, ED mask (2CH) | 0.935 +/- 0.042 |
+| LV Dice, propagated ES mask (2CH) | 0.871 +/- 0.053 |
+| EF bias | -4.7 % |
+| EF SD of the difference | 6.8 % |
+| EF mean absolute error | 6.6 % |
+| Normal/Reduced agreement | **40 / 50 (80 %)** |
+
+Against validation (0.951 / 0.900 / 0.946 / 0.868; bias -4.1 %, MAE 5.2 %,
+44/50), segmentation held up almost unchanged while EF degraded more. That gap
+is the optimism that validation numbers carry when every decision was made on
+them, and it is reported rather than hidden.
+
+One thing transferred well: the calibration offset was measured on training
+patients, and the bias moved only 0.6 points between validation and a completely
+new cohort.
+
+### Architecture comparison — end to end, on validation
 
 | Metric | U-Net | PVTv2 | PVTv2 + reverse attention |
 |---|---|---|---|
@@ -67,9 +91,6 @@ Propagating from a *perfect* ED mask scores 0.916 at ES; propagating from a
 model's own mask scores 0.900-0.908. Little is lost, which indicates
 segmentation error is carried forward rather than amplified — registration
 follows the motion in the image, not the shape of the mask it is moving.
-
-The held-out test set has not been used. Every decision reported here was made
-on validation.
 
 ## Dataset
 
@@ -218,8 +239,8 @@ threshold.
 ### Calibration
 
 Simpson's method overestimates EF systematically, so a fixed offset was measured
-on **training** patients and applied to validation. Fitting the correction on
-the validation set and then reporting improvement on that same set would be
+on **training** patients and applied to validation and test. Fitting the
+correction on a set and then reporting improvement on that same set would be
 circular.
 
 The offset had to be measured twice. The first was derived from ground-truth
@@ -229,17 +250,20 @@ real pipeline conditions it was +1.13 %, +1.04 % and +0.95 % for the three
 models.
 
 **Limitations.**
-- The correction transfers poorly between cohorts. It measured about +1 % on
-  training, yet the residual bias on validation is about -4 % — a shift of over
-  5 points between two 50-patient groups.
+- The correction transfers imperfectly between cohorts. It measured about +1 %
+  on training, yet the residual bias is about -4 % on both validation and test.
+  The offset is consistent across the two unseen cohorts, but it does not
+  reproduce the training measurement.
 - The bias is nearly cancelled by coincidence rather than design: the volume
   method overestimates EF, while the propagated ES mask stays slightly too large
   and underestimates it. These are independent errors that happen to oppose each
   other.
-- The source of the overestimate is not fully explained. Two candidates, both
-  studied by Ferraz et al. (ref. 14): the disks are taken along image rows
-  rather than perpendicular to the true apex-to-annulus axis, and the elliptical
-  cross-section is only an approximation of the real LV shape.
+- The source of the overestimate is not explained. Three hypotheses were tested
+  and rejected — a tilted long axis, mono-plane versus biplane, and re-orienting
+  the disks along the measured LV axis. The remaining candidates are the
+  definition of the LV base in the masks, and the possibility that the reference
+  EF was measured with clinical software rather than derived from these masks at
+  all.
 
 ## Repository layout
 
@@ -262,18 +286,18 @@ python train_pvt.py                  # PVTv2 + attention gates
 python train_pvt_rta.py              # PVTv2 + reverse attention
 python evaluate_segmentation.py
 python calibrate_pipeline_ef.py      # measures the EF offset on training
-python run_pipeline.py               # end-to-end on validation
+python run_pipeline.py               # end-to-end
 pytest                               # unit tests (no dataset required)
 ```
 
 ## Planned work
 
 - Investigate the source of the EF bias rather than only calibrating it — the
-  measured bottleneck, unlike segmentation. Ferraz et al. (ref. 14) tested
-  exactly the two assumptions left open here and report that orienting the disks
-  to the mitral annulus rather than to the image axes improves both accuracy and
-  precision; that is the natural next experiment.
-- Final evaluation on the held-out test set, once the pipeline is frozen.
+  measured bottleneck, unlike segmentation. The disk-orientation hypothesis has
+  been tested and rejected; the definition of the LV base remains open.
+- Wire the denoising module into the pipeline, which requires retraining the
+  segmentation model on denoised frames for a fair comparison.
+- Figures and a demo notebook.
 
 ## Attribution and reuse
 
@@ -334,10 +358,11 @@ repository" button uses the `CITATION.cff` file at the repository root.
 - [x] Registration + mask propagation (validated)
 - [x] EF calculation, biplane, with calibration
 - [x] End-to-end runs with all three architectures
+- [x] Disk orientation along the true LV long axis (tested, rejected)
 - [x] Unit tests + CI workflow
-- [ ] Disk orientation along the true LV long axis
-- [ ] Final test-set evaluation
+- [x] Final test-set evaluation
 - [ ] Figures and demo
+- [ ] Denoising wired into the pipeline
 
 ## Author
 

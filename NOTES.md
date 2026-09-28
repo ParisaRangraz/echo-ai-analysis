@@ -126,8 +126,6 @@ than they do for compact regions. The left atrium has the widest spread, likely
 because it sits near the edge of the ultrasound sector where image quality drops
 and part of it can fall outside the field of view.
 
-The test set has not been used. All tuning decisions were made on validation.
-
 ---
 
 ## Module 3: Registration and mask propagation
@@ -316,18 +314,52 @@ The calibration had to be re-measured under the conditions it would be used in.
 **Lesson:** a correction is only valid under the conditions it was fitted in.
 Ground-truth masks and predicted masks are different conditions.
 
-### Still open
-Calibration treats the symptom. The source of the +6 to +8 point overestimate is
-not yet explained. Two candidates remain untested:
+### Hypothesis 3, tested and rejected: disks along the wrong axis
+Simpson's method stacks disks perpendicular to the LV long axis, but this
+implementation stacks them along image rows, which is only correct if the
+ventricle happens to be vertical in the image. Ferraz et al. (2022) measured
+this assumption directly and report that re-orienting the disks improves both
+accuracy and precision, which made it the strongest remaining candidate.
 
-- disks are taken along image rows rather than perpendicular to the true
-  apex-to-mitral-annulus axis;
-- the LV base in the masks may not correspond to the valve plane as defined
-  clinically.
+Implemented by detecting the axis and rotating the mask upright, then reusing
+the existing row-based calculation — equivalent to tilting the disks, and much
+simpler than resampling along an arbitrary direction.
 
-It is also possible that the reference EF was measured with clinical software
-rather than derived from these masks, in which case no formula applied to these
-masks reproduces it exactly.
+Finding the axis took three attempts, and the first two failed the same way:
+
+1. **Lowest LV row as the base.** When the ventricle is tilted, that row touches
+   only one corner of the mitral plane, not its middle. ES tilt came out at
+   23.1°, far more than the visible tilt.
+2. **Annulus from the LV/atrium boundary, apex as the furthest point from it.**
+   The base was now correct, but the apex landed on a corner of the rounded
+   dome, and the ED tilt jumped from 4.8° to 19.9°.
+3. **A least-squares line through the per-row LV centres.** Correct: ED 14.1°,
+   ES 11.1°, with both endpoints on the centre line.
+
+**Lesson:** an extreme point of a wide, rounded shape lands on a corner, not on
+the axis. Fitting through the whole shape lets every row vote, so no single
+pixel can tilt the result.
+
+With the axis found correctly, the result was still negative:
+
+| | Image-aligned disks | Axis-aligned disks |
+|---|---|---|
+| EDV | 90.3 mL | 95.6 mL |
+| ESV | 31.3 mL | 32.5 mL |
+| EF | 65.3 % | 66.0 % |
+
+Reference: 54 %. The rotation moved EF *further* away.
+
+The reason is the lesson from Hypothesis 2, again: rotation scaled both volumes
+by similar amounts (EDV +5.9 %, ESV +3.8 %), and EF is a ratio. Nearest-neighbour
+rotation also enlarges masks slightly through edge stair-stepping, which is why
+both volumes grew rather than shrank.
+
+**Three hypotheses tested, three rejected.** What remains is the definition of
+the LV base in the masks, and the possibility that the reference EF was measured
+with clinical software rather than derived from these masks at all — in which
+case no formula applied to them reproduces it exactly. Calibration was kept as
+the practical answer, with the bias reported openly.
 
 ---
 
@@ -623,6 +655,47 @@ should precede choosing what to optimise.
 
 ---
 
+## The test set, used once
+
+Every number above was measured on validation, and every decision — architecture,
+loss, learning rates, propagation versus direct segmentation, mono-plane versus
+biplane, the calibration method — was made by looking at those numbers. They are
+therefore optimistic by an unknown amount. The test set exists to measure that
+amount.
+
+It was run once, with the pipeline frozen: PVTv2 + reverse attention, the
+training-derived offset, no changes afterwards.
+
+| Metric | Validation | Test |
+|---|---|---|
+| LV Dice, ED (4CH) | 0.951 +/- 0.022 | 0.946 +/- 0.020 |
+| LV Dice, ES (4CH) | 0.900 +/- 0.035 | 0.882 +/- 0.051 |
+| LV Dice, ED (2CH) | 0.946 +/- 0.023 | 0.935 +/- 0.042 |
+| LV Dice, ES (2CH) | 0.868 +/- 0.067 | 0.871 +/- 0.053 |
+| EF bias | -4.1 % | -4.7 % |
+| EF SD | 5.7 % | 6.8 % |
+| EF mean absolute error | 5.2 % | 6.6 % |
+| Normal/Reduced agreement | 44/50 | **40/50** |
+
+Segmentation barely moved. EF degraded more: the mean absolute error rose by 1.4
+points and four more patients crossed the classification threshold the wrong way.
+
+That pattern is consistent with where the tuning happened. Architecture choices
+were made on segmentation Dice, and those transferred. The EF pipeline has more
+free choices downstream — which variant of Simpson's method, how the calibration
+offset is measured, propagation versus direct segmentation — and each was picked
+by looking at validation EF. The optimism accumulated there.
+
+One thing transferred cleanly: the calibration offset was fitted on training and
+moved the bias by only 0.6 points between two entirely different cohorts
+(-4.1 % to -4.7 %). Its failure mode is not instability but a persistent offset
+from the training measurement, which the README states as a limitation.
+
+**Lesson:** the size of the validation-to-test drop is itself a measurement. It
+says how many decisions were made on validation and how much they were worth.
+
+---
+
 ## Conventions adopted along the way
 
 - **Change one thing at a time.** Every fix above was isolated, so its effect
@@ -645,6 +718,7 @@ should precede choosing what to optimise.
   conclusion drawn from a null result was too strong and later proved wrong.
 - **Check that the end metric is sensitive to the component being improved**
   before spending effort on it.
+- **Touch the test set once.** Everything else is validation.
 - **Cache expensive steps.** Preprocessing writes one `.npz` per patient per view;
   trained models are saved to disk, so evaluation does not require retraining.
 - **Long runs write results to CSV after every patient** and save a model

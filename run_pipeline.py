@@ -103,14 +103,16 @@ def process_view(pid, view):
     return ed_mask, es_mask, spacing, dice_ed, dice_es
 
 
-patient_ids = read_patient_list("validation")
+#patient_ids = read_patient_list("validation")
+patient_ids = read_patient_list("testing")
 if LIMIT:
     patient_ids = patient_ids[:LIMIT]
 
 os.makedirs("results", exist_ok=True)
 #csv_path = os.path.join("results", "pipeline_validation.csv")
 #csv_path = os.path.join("results", "pipeline_validation_pvt.csv")
-csv_path = os.path.join("results", "pipeline_validation_rta.csv")
+#csv_path = os.path.join("results", "pipeline_validation_rta.csv")
+csv_path = os.path.join("results", "pipeline_test_rta.csv")
 rows = []
 start = time.time()
 
