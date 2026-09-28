@@ -1,0 +1,24 @@
+# Never commit dataset files (CAMUS terms prohibit redistribution)
+data/raw/
+data/CAMUS*/
+data/processed/
+*.nii
+*.nii.gz
+*.mhd
+*.raw
+*.npz
+
+# Python cache
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+venv/
+.env
+
+# Model checkpoints (large binaries)
+*.pt
+*.pth
+checkpoints/
+
+# OS
+.DS_Store

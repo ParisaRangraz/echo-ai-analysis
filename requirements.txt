@@ -1,0 +1,7 @@
+numpy
+scipy
+matplotlib
+SimpleITK
+scikit-image
+torch
+torchvision

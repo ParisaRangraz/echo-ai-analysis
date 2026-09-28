@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+title: "Echo AI Analysis: an end-to-end pipeline for echocardiographic segmentation, motion tracking and ejection fraction estimation"
+message: "If you use this software or its findings in your work, please cite it."
+type: software
+authors:
+  - family-names: Rangraz
+    given-names: Parisa
+    orcid: ""
+repository-code: "https://github.com/ParisaRangraz/echo-ai-analysis"
+abstract: >-
+  An end-to-end pipeline for echocardiographic image analysis on the public
+  CAMUS dataset: speckle denoising, multi-structure segmentation of the apical
+  two- and four-chamber views, deformable registration to propagate the
+  end-diastolic mask through the cardiac cycle, biplane Simpson volume
+  estimation, and classification of left ventricular ejection fraction.
+  Three segmentation architectures are compared end to end, including a
+  reverse-attention decoder on a PVTv2 encoder.
+keywords:
+  - echocardiography
+  - medical image segmentation
+  - image registration
+  - ejection fraction
+  - ultrasound
+  - CAMUS
+license: MIT
