@@ -1,5 +1,7 @@
 # Echo AI Analysis
 
+![tests](https://github.com/ParisaRangraz/echo-ai-analysis/actions/workflows/tests.yml/badge.svg)
+
 An end-to-end pipeline for echocardiographic image analysis — denoising,
 segmentation, motion-based mask propagation, and left ventricular ejection
 fraction (LVEF) classification — built on the public CAMUS dataset.
