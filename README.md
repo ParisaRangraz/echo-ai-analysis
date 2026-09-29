@@ -36,6 +36,12 @@ Each module was first validated in isolation, using ground-truth masks as
 input, so its own error could be measured without contamination from the stages
 before it. Only then were they connected end to end.
 
+![Pipeline output on one patient](figures/qualitative_example.png)
+
+*The network segments the ED frame; registration carries that mask to ES. The
+propagated mask's edges are visibly rougher — every step resamples the previous
+estimate, so small errors accumulate.*
+
 ## Results
 
 ### Held-out test set — the headline numbers
@@ -54,6 +60,12 @@ scoring. Model: PVTv2 + reverse attention. EF offset: measured on training.
 | EF SD of the difference | 6.8 % |
 | EF mean absolute error | 6.6 % |
 | Normal/Reduced agreement | **40 / 50 (80 %)** |
+
+![Bland-Altman plot of EF on the test set](figures/bland_altman_test.png)
+
+*The scatter is flat rather than sloped, so the error does not depend on the EF
+value — it is an offset plus noise, not a systematic distortion at one end of
+the range.*
 
 Against validation (0.951 / 0.900 / 0.946 / 0.868; bias -4.1 %, MAE 5.2 %,
 44/50), segmentation held up almost unchanged while EF degraded more. That gap
@@ -163,6 +175,11 @@ Dice combined), for the same 15 epochs, on ED frames from both apical views
 | PVTv2 + reverse attention (conv) | 5.0 M | 0.951 | **0.872** | **0.902** |
 | PVTv2 + reverse attention (transformer) | 5.8 M | **0.952** | 0.872 | 0.901 |
 
+![Dice per structure for each architecture](figures/architecture_comparison.png)
+
+*The LV cavity is already near its ceiling and barely moves. Only the myocardium
+— the thin ring in the middle — separates the architectures.*
+
 The transformer encoder's clearest gain is the left atrium — in 2CH it raises
 Dice from 0.853 to 0.906 and cuts the standard deviation to a third. That
 structure lies deepest in the sector, where local texture alone is ambiguous and
@@ -196,6 +213,13 @@ annotations at every frame.
 |---|---|
 | Copy the ED mask unchanged | 0.783 +/- 0.082 |
 | Frame-to-frame registration | 0.916 +/- 0.032 |
+
+![Dice through the cardiac cycle](figures/propagation_curve.png)
+
+*The two curves are indistinguishable for the first fifth of the cycle: there is
+almost no motion yet, so there is nothing for registration to correct. They
+separate as contraction proceeds, and the gap is widest at ES, where it matters
+for ejection fraction.*
 
 Mean Dice across all frames: 0.945 +/- 0.019. Registration beat the baseline in
 50/50 patients and halved the standard deviation.
@@ -273,6 +297,7 @@ models/        network architectures and loss functions
 evaluation/    metrics and clinical measurements
 tests/         unit tests for the core functions
 results/       CSV outputs from evaluation runs
+figures/       figures used in this README
 *.py           top-level scripts: training, evaluation, full pipeline
 ```
 
@@ -287,6 +312,7 @@ python train_pvt_rta.py              # PVTv2 + reverse attention
 python evaluate_segmentation.py
 python calibrate_pipeline_ef.py      # measures the EF offset on training
 python run_pipeline.py               # end-to-end
+python make_figures.py               # regenerates the figures above
 pytest                               # unit tests (no dataset required)
 ```
 
@@ -297,7 +323,6 @@ pytest                               # unit tests (no dataset required)
   been tested and rejected; the definition of the LV base remains open.
 - Wire the denoising module into the pipeline, which requires retraining the
   segmentation model on denoised frames for a fair comparison.
-- Figures and a demo notebook.
 
 ## Attribution and reuse
 
@@ -361,7 +386,7 @@ repository" button uses the `CITATION.cff` file at the repository root.
 - [x] Disk orientation along the true LV long axis (tested, rejected)
 - [x] Unit tests + CI workflow
 - [x] Final test-set evaluation
-- [ ] Figures and demo
+- [x] Figures
 - [ ] Denoising wired into the pipeline
 
 ## Author
