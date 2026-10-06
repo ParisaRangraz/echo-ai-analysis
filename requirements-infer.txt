@@ -1,0 +1,6 @@
+# Everything infer.py needs with an ONNX model -- no PyTorch.
+numpy
+scipy
+scikit-image
+SimpleITK
+onnxruntime

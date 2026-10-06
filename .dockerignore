@@ -1,0 +1,15 @@
+.git
+.github
+__pycache__
+*.pyc
+*.npz
+*.pt
+*.pth
+*.onnx
+data/raw
+data/CAMUS*
+data/processed
+results
+figures
+tests
+NOTES.md

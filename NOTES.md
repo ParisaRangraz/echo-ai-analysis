@@ -696,6 +696,95 @@ says how many decisions were made on validation and how much they were worth.
 
 ---
 
+## Deployment: ONNX, quantization, Docker, CI
+
+### Why
+Until this point the model existed only as a PyTorch `.pt` checkpoint, and every
+script that used it needed PyTorch and timm installed. In medical imaging a
+model usually runs inside device or clinical software, not inside a Python
+research environment. ONNX is a framework-independent format that ONNX Runtime
+(and C++/C# runtimes) can execute, so exporting to it removes the PyTorch
+dependency from inference.
+
+### What was added
+- `export_onnx.py` exports the PVTv2 + reverse-attention model (fixed 256x256
+  input, dynamic batch) and immediately compares its output with PyTorch's on
+  the same random inputs: largest logit difference and the fraction of pixels
+  with an identical predicted class.
+- `quantize_onnx.py` does static INT8 quantization (QDQ format, per-channel
+  weights) calibrated on a random sample of real preprocessed training images.
+- `benchmark_onnx.py` reports file size, CPU latency and per-structure Dice for
+  PyTorch, ONNX FP32 and ONNX INT8.
+- `infer.py` runs the whole pipeline on one patient from two NIfTI files and
+  prints EDV, ESV, EF and the class as JSON.
+- `Dockerfile` builds an inference image that contains only the inference code
+  and ONNX Runtime; the model and the data are mounted, not baked in.
+- CI now has three jobs: the fast unit tests, an ONNX job, and a Docker build.
+
+### Decisions
+- **Calibration data.** Static quantization measures activation ranges on a
+  calibration set, so the set must look like the real inputs. Random noise gives
+  the wrong ranges; it is allowed only as a smoke test (`--synthetic`).
+- **Quantization is judged on Dice, not on speed.** A quantized model that is
+  faster but segments worse is a regression, so the benchmark reports Dice
+  against ground truth for every variant. INT8 is also only faster on CPUs with
+  fast 8-bit integer instructions.
+- **The EF offset belongs to the model it was measured for.** The +0.95 offset
+  was measured for the FP32 PyTorch model. A quantized copy is a different model
+  and would need its own offset, which is why `infer.py` takes `--ef-offset`.
+- **CI uses random weights.** Checkpoints are not in the repository, so the CI
+  job tests that the export computes the same function as PyTorch and that the
+  scripts run. It says nothing about the trained model's accuracy.
+
+### Found while writing it
+- **A failed segmentation could be reported as "Normal".** If the model finds no
+  LV, the EDV is 0, `ejection_fraction` returns NaN, and `classify_ef(NaN)`
+  returns "Normal" because `NaN < 50` is False. `infer.py` now raises an error
+  instead of printing a class. The same behaviour still exists in
+  `evaluation/volume.py` and has not been changed there.
+- **A reversed sequence is visible in the output.** If a sequence is fed in
+  ES -> ED order, EF comes out negative, as it did in the bug described earlier.
+  `infer.py` reads the ED/ES frame numbers from `Info_*.cfg` when given, and adds
+  a warning to its output when the EF is negative.
+- **`timm` was missing from `requirements.txt`**, although the model files
+  import it. A fresh install would have failed.
+- **`data/loader.py` contains absolute Windows paths** to the local dataset
+  folder. `infer.py` does not depend on them, but they are in a public
+  repository and should become a configuration setting.
+
+### Results
+Run on the trained PVTv2 + reverse-attention model, on 100 validation images
+(50 patients x 2 views, ED frames), 12-thread Intel CPU, batch 1, median of 50
+timed runs after 10 warm-up runs.
+
+| Variant | Size (MB) | Median ms | p95 ms | LV cavity | Myocardium | Left atrium |
+|---|---|---|---|---|---|---|
+| PyTorch FP32 | - | 330.0 | 407.4 | 0.949 | 0.874 | 0.906 |
+| ONNX Runtime FP32 | 20.23 | 50.2 | 63.8 | 0.949 | 0.874 | 0.906 |
+| ONNX Runtime INT8 | 5.83 | 64.6 | 77.2 | 0.948 | 0.872 | 0.903 |
+
+- ONNX FP32 reproduces PyTorch exactly: the predicted class is identical on
+  100.00 % of pixels and the Dice values are the same to three decimals. It is
+  about 6.6x faster.
+- INT8 shrank the file 3.5x, but it was **slower** than FP32 (64.6 vs 50.2 ms)
+  and cost 0.001-0.003 Dice per structure; it agrees with FP32 on 98.92 % of
+  pixels. The expectation that quantization speeds up inference did not hold on
+  this CPU. The cause was not investigated, so none is claimed.
+- Only segmentation Dice was measured. The effect of INT8 on end-to-end EF was
+  not, and its EF offset has not been re-measured.
+
+### Status
+Done on the real model: ONNX export (confirmed by the PyTorch-vs-ONNX
+agreement above), INT8 quantization, and the benchmark. Not yet confirmed:
+`infer.py` on a real patient, the Docker build, and the new CI jobs on GitHub.
+
+**Lesson:** a deployment path that only exists on paper is not evidence. The
+parity check turns "I exported it" into "the exported model computes the same
+function". And an optimisation has to be measured on the hardware it will run
+on: the quantized model was smaller and slightly less accurate, and also slower.
+
+---
+
 ## Conventions adopted along the way
 
 - **Change one thing at a time.** Every fix above was isolated, so its effect

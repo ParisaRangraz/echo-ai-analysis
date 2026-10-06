@@ -5,3 +5,6 @@ SimpleITK
 scikit-image
 torch
 torchvision
+timm
+onnx
+onnxruntime

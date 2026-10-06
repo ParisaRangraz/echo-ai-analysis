@@ -8,6 +8,8 @@ on:
     branches: [main]
 
 jobs:
+  # Fast job: core functions and the inference pipeline's plumbing. These tests
+  # use synthetic arrays, so they need no dataset, no PyTorch and no GPU.
   test:
     runs-on: ubuntu-latest
 
@@ -18,10 +20,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
 
-      # Only the packages the tests actually need. The tests use synthetic
-      # arrays rather than the CAMUS dataset, so they run anywhere -- no data,
-      # no PyTorch, no GPU.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -29,3 +29,49 @@ jobs:
 
       - name: Run tests
         run: pytest
+
+  # Deployment job: export the model to ONNX, check it against PyTorch, and
+  # run the quantization and benchmark scripts. Uses a random-weight model
+  # (checkpoints are not in the repository), so it tests the machinery, not
+  # the trained model's accuracy.
+  onnx:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # The CPU-only PyTorch build is a few hundred MB; the default PyPI build
+      # bundles CUDA libraries that a CI runner cannot use.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy scipy scikit-image SimpleITK timm onnx onnxruntime pytest
+
+      - name: ONNX tests
+        run: pytest tests/test_onnx.py -v
+
+      - name: Export, quantize and benchmark (random weights)
+        run: |
+          python export_onnx.py --random-weights --out /tmp/model.onnx
+          python quantize_onnx.py --synthetic --n-calib 4 --model /tmp/model.onnx --out /tmp/model_int8.onnx
+          python benchmark_onnx.py --fp32 /tmp/model.onnx --int8 /tmp/model_int8.onnx --runs 5 --warmup 2
+
+  # The inference image must build and start.
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t echo-ai-analysis .
+
+      - name: Smoke test
+        run: docker run --rm echo-ai-analysis --help

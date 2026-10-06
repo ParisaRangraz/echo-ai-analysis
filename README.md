@@ -318,6 +318,87 @@ python make_figures.py               # regenerates the figures above
 pytest                               # unit tests (no dataset required)
 ```
 
+Export, quantization, `infer.py` and Docker are described under Deployment below.
+
+## Deployment
+
+The trained model can be exported to ONNX and run without PyTorch. This is how
+a model is usually deployed inside device software, so the repository includes
+the whole path and checks each step.
+
+```
+python export_onnx.py                  # PyTorch -> ONNX, with a parity check against PyTorch
+python quantize_onnx.py                # static INT8 quantization, calibrated on training images
+python benchmark_onnx.py --fp32 models/pvt_rta.onnx --int8 models/pvt_rta_int8.onnx \
+    --weights models/pvt_rta_both_views.pt --data data/processed/validation \
+    --save results/onnx_benchmark.md   # size, CPU latency and Dice for each variant
+python infer.py --model models/pvt_rta.onnx \
+    --seq-4ch patient0001_4CH_half_sequence.nii.gz --seq-2ch patient0001_2CH_half_sequence.nii.gz \
+    --cfg-4ch Info_4CH.cfg --cfg-2ch Info_2CH.cfg      # EF for one patient
+```
+
+`infer.py` takes two sequence files and prints EDV, ESV, EF and the
+Normal/Reduced class as JSON. It needs only ONNX Runtime (no PyTorch). If the
+model finds no left ventricle it exits with an error instead of reporting a
+class, and it warns about a negative EF, which indicates a sequence in ES -> ED
+order.
+
+Quantization is judged on accuracy, not only speed: `benchmark_onnx.py` reports
+Dice against ground truth for every variant, because a faster model that
+segments worse is a regression. The EF calibration offset was measured for the
+FP32 model, so a quantized model should be re-calibrated before its EF is
+trusted (`--ef-offset`).
+
+### Results
+
+Measured on 100 validation images (50 patients x 2 views, ED frames) on a
+12-thread Intel CPU, batch size 1, 256x256, median of 50 runs after 10 warm-up
+runs. Dice is against the CAMUS ground truth, on the segmentation output only
+(not end-to-end EF).
+
+| Variant | Size (MB) | Median ms | p95 ms | LV cavity | Myocardium | Left atrium |
+|---|---|---|---|---|---|---|
+| PyTorch FP32 | - | 330.0 | 407.4 | 0.949 | 0.874 | 0.906 |
+| ONNX Runtime FP32 | 20.23 | 50.2 | 63.8 | 0.949 | 0.874 | 0.906 |
+| ONNX Runtime INT8 | 5.83 | 64.6 | 77.2 | 0.948 | 0.872 | 0.903 |
+
+- **ONNX FP32 is identical to PyTorch** (same class on 100.00 % of pixels, same
+  Dice) and about 6.6x faster on this CPU.
+- **INT8 is 3.5x smaller but slower than FP32 here** (64.6 vs 50.2 ms) and loses
+  0.001-0.003 Dice per structure; it predicts the same class as FP32 on 98.92 %
+  of pixels. On this CPU, quantization saves storage, not time. The cause was
+  not investigated. INT8 speed depends on the CPU's 8-bit integer support, so the
+  result may differ elsewhere.
+- Because of that, the FP32 ONNX model is the one to use with `infer.py`. The
+  quantized model's effect on EF was not measured, and its EF offset would need
+  to be re-measured first.
+
+Latencies come from a single benchmark run and will vary somewhat between runs.
+
+### Docker
+
+```
+docker build -t echo-ai-analysis .
+docker run --rm -v "$PWD/models:/models:ro" -v "/path/to/patient:/input:ro" \
+    echo-ai-analysis --model /models/pvt_rta.onnx \
+    --seq-4ch /input/patient0001_4CH_half_sequence.nii.gz \
+    --seq-2ch /input/patient0001_2CH_half_sequence.nii.gz \
+    --cfg-4ch /input/Info_4CH.cfg --cfg-2ch /input/Info_2CH.cfg
+```
+
+The image contains only the inference code and ONNX Runtime. The model and the
+data are mounted, not baked in: checkpoints are not in the repository, and the
+CAMUS terms do not allow redistributing the data.
+
+### Continuous integration
+
+GitHub Actions runs three jobs on every push: the fast unit tests, an ONNX job
+(export, parity with PyTorch, quantization and benchmark scripts, on a
+random-weight model), and a Docker build with a smoke test. The ONNX job tests
+the machinery, not the trained model's accuracy.
+
+> This is a research prototype, not a medical device, and is not for clinical use.
+
 ## Planned work
 
 - Investigate the source of the EF bias rather than only calibrating it — the
@@ -390,6 +471,8 @@ repository" button uses the `CITATION.cff` file at the repository root.
 - [x] Final test-set evaluation
 - [x] Figures
 - [ ] Denoising wired into the pipeline
+- [x] Deployment: ONNX export, INT8 quantization and benchmark on the trained model
+- [ ] Deployment: `infer.py` on a real patient, Docker image and the extended CI confirmed working
 
 ## Author
 
