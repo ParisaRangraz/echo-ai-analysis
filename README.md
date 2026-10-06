@@ -472,7 +472,7 @@ repository" button uses the `CITATION.cff` file at the repository root.
 - [x] Figures
 - [ ] Denoising wired into the pipeline
 - [x] Deployment: ONNX export, INT8 quantization and benchmark on the trained model
-- [ ] Deployment: `infer.py` on a real patient, Docker image and the extended CI confirmed working
+- [x] Deployment: `infer.py` on a real patient, Docker image and the extended CI confirmed working
 
 ## Author
 
