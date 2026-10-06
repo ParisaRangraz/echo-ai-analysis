@@ -6,19 +6,46 @@ Import these into other scripts (exploration, preprocessing, training)
 instead of copy-pasting them.
 """
 
+import os
+
 import SimpleITK as sitk
 import numpy as np
 from skimage.transform import resize as sk_resize
 
 
-DATA_ROOT = r"C:\Users\prang\OneDrive\Documents\github development-ultrasound image processing project\data\CAMUS_public\CAMUS_public\database_nifti"
-SPLIT_ROOT = r"C:\Users\prang\OneDrive\Documents\github development-ultrasound image processing project\data\CAMUS_public\CAMUS_public\database_split"
+# Where the CAMUS dataset lives. Set the ECHO_DATA_ROOT environment variable to
+# the folder that contains database_nifti/ and database_split/. If it is not
+# set, a path relative to the repository root is used, which matches the layout
+# in data/README.md. No absolute path is hard-coded here, so the repository
+# carries no machine-specific path and runs on any machine once the data is in
+# place or the variable is set.
+_DEFAULT_ROOT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "data", "CAMUS_public", "CAMUS_public",
+)
+_DATA_HOME = os.environ.get("ECHO_DATA_ROOT", _DEFAULT_ROOT)
+
+DATA_ROOT = os.path.join(_DATA_HOME, "database_nifti")
+SPLIT_ROOT = os.path.join(_DATA_HOME, "database_split")
+
+
+def _require(path):
+    """Return `path`, or raise a clear error naming ECHO_DATA_ROOT if it is missing."""
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"CAMUS file not found:\n  {path}\n"
+            f"Looked under data root: {_DATA_HOME}\n"
+            "Set the ECHO_DATA_ROOT environment variable to the folder that "
+            "contains database_nifti/ and database_split/, or place the data "
+            "there (see data/README.md)."
+        )
+    return path
 
 
 def load_patient_frame(patient_id, view="4CH", phase="ED"):
     """Load a single echo frame and its ground-truth mask for one patient."""
-    img_path = f"{DATA_ROOT}\\{patient_id}\\{patient_id}_{view}_{phase}.nii.gz"
-    gt_path = f"{DATA_ROOT}\\{patient_id}\\{patient_id}_{view}_{phase}_gt.nii.gz"
+    img_path = _require(os.path.join(DATA_ROOT, patient_id, f"{patient_id}_{view}_{phase}.nii.gz"))
+    gt_path = _require(os.path.join(DATA_ROOT, patient_id, f"{patient_id}_{view}_{phase}_gt.nii.gz"))
 
     img = sitk.ReadImage(img_path)
     gt_img = sitk.ReadImage(gt_path)
@@ -41,7 +68,7 @@ def read_patient_list(subgroup_name):
     Read a subgroup file by name (e.g. 'training', 'validation', 'testing')
     from the official CAMUS split, and return a list of patient IDs.
     """
-    txt_path = f"{SPLIT_ROOT}\\subgroup_{subgroup_name}.txt"
+    txt_path = _require(os.path.join(SPLIT_ROOT, f"subgroup_{subgroup_name}.txt"))
     with open(txt_path, "r") as f:
         ids = [line.strip() for line in f if line.strip()]
     return ids
@@ -58,7 +85,7 @@ def read_patient_list(subgroup_name):
 #     Returns:
 #         np.ndarray of shape (num_frames, height, width)
 #     """
-#     path = f"{DATA_ROOT}\\{patient_id}\\{patient_id}_{view}_half_sequence.nii.gz"
+#     path = _require(os.path.join(DATA_ROOT, patient_id, f"{patient_id}_{view}_half_sequence.nii.gz"))
 #     img = sitk.ReadImage(path)
 #     array = sitk.GetArrayFromImage(img)
 #     return array
@@ -75,7 +102,7 @@ def load_half_sequence(patient_id, view="4CH", gt=False):
         np.ndarray of shape (num_frames, height, width)
     """
     suffix = "_gt" if gt else ""
-    path = f"{DATA_ROOT}\\{patient_id}\\{patient_id}_{view}_half_sequence{suffix}.nii.gz"
+    path = _require(os.path.join(DATA_ROOT, patient_id, f"{patient_id}_{view}_half_sequence{suffix}.nii.gz"))
     img = sitk.ReadImage(path)
     array = sitk.GetArrayFromImage(img)
     return array
@@ -84,7 +111,7 @@ def load_sequence_spacing(patient_id, view="4CH"):
     Return the physical pixel spacing (x, y) of the half_sequence,
     needed for registration. The third spacing value is time, so it is dropped.
     """
-    path = f"{DATA_ROOT}\\{patient_id}\\{patient_id}_{view}_half_sequence.nii.gz"
+    path = _require(os.path.join(DATA_ROOT, patient_id, f"{patient_id}_{view}_half_sequence.nii.gz"))
     img = sitk.ReadImage(path)
     return img.GetSpacing()[:2]
 
@@ -96,7 +123,7 @@ def parse_info_cfg(patient_id, view="4CH"):
 
     Returns a dict; numeric values are converted to int or float.
     """
-    path = f"{DATA_ROOT}\\{patient_id}\\Info_{view}.cfg"
+    path = _require(os.path.join(DATA_ROOT, patient_id, f"Info_{view}.cfg"))
     info = {}
 
     with open(path, "r") as f:

@@ -6,8 +6,8 @@ import torch
 # print("PyTorch version:", torch.__version__)
 # print("CUDA available (GPU):", torch.cuda.is_available())
 # # # File paths
-# # image_path = r"C:\Users\prang\OneDrive\Documents\github development-ultrasound image processing project\data\CAMUS_public\CAMUS_public\database_nifti\patient0001\patient0001_4CH_ED.nii.gz"
-# # gt_path = r"C:\Users\prang\OneDrive\Documents\github development-ultrasound image processing project\data\CAMUS_public\CAMUS_public\database_nifti\patient0001\patient0001_4CH_ED_gt.nii.gz"
+# # image_path = r"<ECHO_DATA_ROOT>/database_nifti\patient0001\patient0001_4CH_ED.nii.gz"
+# # gt_path = r"<ECHO_DATA_ROOT>/database_nifti\patient0001\patient0001_4CH_ED_gt.nii.gz"
 
 # # # Read images
 # # img = sitk.ReadImage(image_path)
@@ -37,7 +37,7 @@ import torch
 
 
 # # # --- Reusable loader function ---
-# # DATA_ROOT = r"C:\Users\prang\OneDrive\Documents\github development-ultrasound image processing project\data\CAMUS_public\CAMUS_public\database_nifti"
+# # DATA_ROOT = r"<ECHO_DATA_ROOT>/database_nifti"
 
 # # def load_patient_frame(patient_id, view="4CH", phase="ED"):
 # #     """
@@ -80,7 +80,7 @@ import torch
 # #     return ids
 
 # # training_ids = read_patient_list(
-# #     r"C:\Users\prang\OneDrive\Documents\github development-ultrasound image processing project\data\CAMUS_public\CAMUS_public\database_split\subgroup_training.txt"
+# #     r"<ECHO_DATA_ROOT>/database_split\subgroup_training.txt"
 # # )
 
 # # print("Number of training patients:", len(training_ids))
